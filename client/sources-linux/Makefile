@@ -19,8 +19,12 @@ XZARGS ?= "aligned(0x1000)" 'section(".xzrodata")'
 ARCH ?= $(shell file $(LIBPYTHON) | grep 32-bit >/dev/null && echo 32 || echo 64)
 ifeq ($(ARCH),64)
 NAME := 64
+CFLAGS += -m64
+LDFLAGS += -m64
 else
 NAME := 86
+CFLAGS += -m32
+LDFLAG += -m32
 endif
 
 LINUX_INJECT_CFLAGS := -include fixes.h -include debug.h \
@@ -47,7 +51,7 @@ TEMPLATE_OUTPUT_PATH ?= ../../pupy/payload_templates/
 PYOBJS := _memimporter.o Python-dynload.o pupy_load.o pupy.o
 COMMON_OBJS := list.o tmplibrary.o daemonize.o decompress.o LzmaDec.o
 
-ifeq ($(OS),Linux)
+ifdef Linux
 ifeq ($(ARCH),64)
 COMMON_OBJS += linux-inject/inject-x86_64.o
 else
@@ -75,7 +79,7 @@ Python-dynload.o: Python-dynload.c import-tab.c import-tab.h
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 LzmaDec.o: ../lzma/LzmaDec.c
-	$(CC) -O3 -fPIC -c -o $@ $<
+	$(CC) $(CFLAGS) -O3 -fPIC -c -o $@ $<
 
 resources/library_compressed_string.txt: ../gen_library_compressed_string.py resources/library.zip
 	$(PYTHON) $(PFLAGS) ../gen_library_compressed_string.py
