@@ -25,11 +25,12 @@ script:
   - sleep 3
   - ( cd $TRAVIS_BUILD_DIR/client/sources && ./buildenv.sh ) &
     ( cd $TRAVIS_BUILD_DIR/client/sources-linux && sudo -E ./buildenv.sh ) &
-    ( cd $TRAVIS_BUILD_DIR/client/android_sources && ln -sf buildozer.spec.example buildozer.spec && buildozer android update ) & wait
+    ( cd $TRAVIS_BUILD_DIR/client/android_sources && ln -sf buildozer.spec.example buildozer.spec && buildozer android update && rm -f $HOME/.buildozer/*.tar*  && rm -f $HOME/.buildozer/*.tgz ) & wait
   - ( cd $TRAVIS_BUILD_DIR/client/sources && ./build.sh ) &
     ( cd $TRAVIS_BUILD_DIR/client/sources-linux && sudo -E ./build.sh ) &
     ( cd $TRAVIS_BUILD_DIR/client/android_sources && buildozer android release; mv .buildozer/android/platform/build/dists/pupy/bin/Wi-Fi-0.1-release-unsigned.apk ../../pupy/payload_templates/pupy.apk ) & wait
   - ls -l $TRAVIS_BUILD_DIR/pupy/payload_templates
+  - df -h
 before_cache:
   - ( if [ ! -f $HOME/.cache/win.tgz ]; then tar --remove-files -C $TRAVIS_BUILD_DIR/client/sources -zcf $HOME/.cache/win.tgz buildenv; fi; rm -rf $TRAVIS_BUILD_DIR/client/sources/buildenv ) &
     ( if [ ! -f $HOME/.cache/lin.tgz ]; then sudo -E tar --remove-files -C $TRAVIS_BUILD_DIR/client/sources-linux -zcf $HOME/.cache/lin.tgz buildenv; fi; sudo rm -rf $TRAVIS_BUILD_DIR/client/sources-linux/buildenv ) &
@@ -40,6 +41,7 @@ before_cache:
          .buildozer/android/platform/android-sdk-20
          .buildozer/android/platform/apache-ant-1.9.4;
     fi; rm -rf $HOME/.buildozer ) & wait
+  - df -h
 cache:
   apt: true
   directories:
