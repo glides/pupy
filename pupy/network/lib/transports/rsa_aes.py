@@ -87,6 +87,7 @@ class RSA_AESTransport(BasePupyTransport):
 
         except Exception as e:
             logger.debug(e)
+            raise EOFError(str(e))
 
     def downstream_recv(self, data):
         try:
@@ -174,8 +175,13 @@ class RSA_AESTransport(BasePupyTransport):
 
                     break
 
-        except:
+            if __debug__:
+                if self.size_to_read:
+                    logger.debug('RSA Incomplete message, left=%d', self.size_to_read)
+
+        except Exception, e:
             logger.debug(traceback.format_exc())
+            raise EOFError(str(e))
 
 class RSA_AESClient(RSA_AESTransport):
     __slots__ = (
