@@ -156,13 +156,14 @@ class RemoteDesktopModule(PupyModule):
             }),
         ]
 
-        url = self.start_webplugin()
-        if not url:
+        conninfo = self.start_webplugin()
+        if not conninfo:
             self.error('WebServer is not enabled')
             self.info('Enable with "config set pupyd webserver true"')
             return
 
-        self.success("Web handler started on %s"%url)
+        port, path = conninfo
+        self.success("Web handler started on http://127.0.0.1:%d%s"%(port, path))
         if args.view:
             config = self.client.pupsrv.config
             viewer = config.get('default_viewers', 'browser')

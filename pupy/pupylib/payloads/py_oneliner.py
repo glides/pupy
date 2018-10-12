@@ -63,7 +63,10 @@ def pack_py_payload(display, conf, debug=False):
     return compress_encode_obfs(payload, main=True)
 
 
-def serve_payload(display, payload, ip="0.0.0.0", port=8080, link_ip="<your_ip>"):
+def serve_payload(display, server, payload, ip="0.0.0.0", port=8080, link_ip="<your_ip>"):
+
+    display(Warn('Press Ctrl+C to stop server'))
+
     class PupyPayloadHTTPHandler(BaseHTTPRequestHandler):
         def do_GET(self):
             self.send_response(200)

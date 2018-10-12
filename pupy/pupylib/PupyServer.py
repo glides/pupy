@@ -812,10 +812,8 @@ class PupyServer(object):
                     Color(modname, 'yellow'),
                     'at ({}): {}. Traceback:\n{}'.format(
                     modpath, e, tb))
-                if self.handler:
-                    self.handler.display_srvinfo(error)
-                else:
-                    self.motd['fail'].append(error)
+
+                self.info(error, error=True)
 
     def get_module(self, name):
         enable_dangerous_modules = self.config.getboolean('pupyd', 'enable_dangerous_modules')
@@ -1035,7 +1033,10 @@ class PupyServer(object):
         if error:
             del self.listeners[name]
 
-        if motd:
+        self.display(message, error, motd)
+
+    def display(self, message, error=False, motd=True):
+        if motd or not self.handler:
             if error:
                 self.motd['fail'].append(error)
             else:
@@ -1045,6 +1046,14 @@ class PupyServer(object):
                 self.handler.display_error(error)
             else:
                 self.handler.display_success(message)
+
+    def info(self, message, error=False):
+        if self.handler:
+            self.handler.display_srvinfo(error)
+        elif error:
+            self.motd['fail'].append(message)
+        else:
+            self.motd['fail'].append(message)
 
     def remove_listener(self, name):
         if name not in self.listeners:
