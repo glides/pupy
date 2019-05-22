@@ -154,6 +154,9 @@ class AuthInfo(object):
         result.update(self.custom)
         return result
 
+    def as_tuple(self):
+        return tuple((k,v) for k,v in self.as_dict().iteritems())
+
 
 class NetCreds(object):
     __slots__ = ('creds',)
@@ -288,6 +291,26 @@ def find_creds(
         yield cred
 
 
+def remove_creds(
+    schema=None, address=None, port=None, username=None, realm=None,
+        domain=None, path=None):
+
+    manager = NetCreds.get_default_creds_manager()
+    to_remove = set()
+    
+    for cred in manager.find_creds(
+            schema, address, port, username, realm, domain, path):
+        to_remove.add(cred)
+
+    for cred in to_remove:
+        manager.creds.remove(cred)
+
+
+def clear_creds():
+    manager = NetCreds.get_default_creds_manager()
+    manager.creds.clear()
+        
+        
 def find_first_cred(
     schema=None, address=None, port=None, username=None, realm=None,
         domain=None, path=None):
@@ -297,14 +320,22 @@ def find_first_cred(
             schema, address, port, username, realm, domain, path):
         return cred
 
-
 def find_all_creds(
     schema=None, address=None, port=None, username=None, realm=None,
-        domain=None, path=None):
+        domain=None, path=None, as_tuple=False):
 
-    return tuple(find_creds(
+    result = []
+    
+    for cred in find_creds(
         schema=None, address=None, port=None, username=None,
-        realm=None, domain=None, path=None))
+            realm=None, domain=None, path=None)):
+
+        if as_tuple:
+            result.append(cred.as_tuple())
+        else:
+            result.append(cred)
+
+    return tuple(result)
 
 
 def find_creds_for_uri(authuri, username=None, realm=None, domain=None):
@@ -315,7 +346,4 @@ def find_creds_for_uri(authuri, username=None, realm=None, domain=None):
 
 def export():
     manager = NetCreds.get_default_creds_manager()
-    return tuple(
-        tuple((k,v) for k,v in x.as_dict().iteritems())
-        for x in manager.creds
-    )
+    return tuple(x.as_tuple() for x in manager.creds)
