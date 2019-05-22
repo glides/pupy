@@ -20,6 +20,7 @@ from .socks import HTTP as PROXY_SCHEME_HTTP
 
 from poster.streaminghttp import StreamingHTTPConnection, StreamingHTTPSConnection
 from poster.streaminghttp import StreamingHTTPHandler, StreamingHTTPSHandler
+from ntlm.HTTPNtlmAuthHandler import AbstractNtlmAuthHandler
 from poster.encode import multipart_encode
 
 
@@ -29,6 +30,32 @@ def merge_dict(a, b):
     return d
 
 ## Fix poster bug
+
+class DummyPasswordManager(object):
+    __slots__ = ('username', 'password')
+
+    def __init__(self, username, password):
+        self.username = username
+        self.password = password
+
+    def find_user_password(self, *args):
+        print "FIND USER PASSWORD", args
+        print "STORED:", self.username, self.password
+        return self.username, self.password
+
+    def add_password(self, *args):
+        raise NotImplementedError('add_password is not implemented')
+
+class ProxyNtlmAuthHandler(AbstractNtlmAuthHandler, urllib2.BaseHandler):
+    auth_header = 'Proxy-authorization'
+    handler_order = 480
+
+    def __init__(self, password_manager, debuglevel=999):
+        AbstractNtlmAuthHandler.__init__(self, password_manager, debuglevel)
+
+    def http_error_407(self, req, fp, code, msg, headers):
+        return self.http_error_authentication_required(
+            'proxy-authenticate', req, fp, headers)
 
 class NoRedirects(urllib2.HTTPErrorProcessor):
     __slots__ = ()
@@ -365,16 +392,24 @@ class HTTP(object):
 
             handlers = []
 
+            print "PROXY INFO", proxy
+
             if scheme == PROXY_SCHEME_HTTP:
                 http_proxy = proxy_host
 
-                if user and password:
-                    http_proxy = '{}:{}@{}'.format(user, password, http_proxy)
-
-                http_proxy = 'http://' + http_proxy
-
                 handlers.append(urllib2.ProxyHandler({
-                    'http': http_proxy}))
+                    'http': 'http://' + http_proxy
+                }))
+
+                if user and password:
+                    password_manager = DummyPasswordManager(user, password)
+
+                    for handler_klass in (
+                        ProxyNtlmAuthHandler, urllib2.ProxyBasicAuthHandler,
+                            urllib2.ProxyDigestAuthHandler):
+
+                        handlers.append(handler_klass(password_manager))
+
                 handlers.append(StreamingHTTPHandler)
 
             handlers.append(sockshandler)
@@ -383,11 +418,14 @@ class HTTP(object):
             handlers.append(NoRedirects)
 
         handlers.append(UDPReaderHandler)
+        handlers.append(urllib2.HTTPErrorProcessor)
 
         opener = urllib2.OpenerDirector()
         for h in handlers:
             if isinstance(h, (types.ClassType, type)):
                 h = h()
+
+            print "ADD_HANDLER:", h
             opener.add_handler(h)
 
         if type(self.headers) == dict:
@@ -396,6 +434,8 @@ class HTTP(object):
             ]
         else:
             opener.addheaders = self.headers
+
+        print "MAP", opener.handle_error
 
         return opener, scheme, proxy_host
 
