@@ -390,6 +390,8 @@ def hint_to_text(text, width=0):
             for column, value in record.iteritems():
                 if value and (not text.headers or column in text.headers):
                     columns.add(column)
+                    if hasattr(value, '__iter__'):
+                        record[column] = ';'.join(obj2utf8(x) for x in value)
 
         headers = None
         if text.headers:
