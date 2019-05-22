@@ -72,6 +72,7 @@ from base64 import b64encode
 from http_parser.parser import HttpParser
 
 from ntlm import ntlm
+from .netcreds import find_first_cred
 
 if os.name == 'nt':
     try:
@@ -300,7 +301,7 @@ class socksocket(_BaseSocket):
     __slots__ = (
         'proxy', '_proxy_negotiators',
         'proxy_sockname', 'proxy_peername',
-        '_socks5_bind_addr', '_proxyconn'
+        '_socks5_bind_addr', '_proxyconn', '_last_addr'
     )
 
     def __init__(self, family=socket.AF_INET, type=socket.SOCK_STREAM, proto=0, *args, **kwargs):
@@ -311,6 +312,7 @@ class socksocket(_BaseSocket):
         _BaseSocket.__init__(self, family, type, proto, *args, **kwargs)
         self._socks5_bind_addr = None
         self._proxyconn = None  # TCP connection to keep UDP relay alive
+        self._last_addr = None
 
         if self.default_proxy:
             self.proxy = [self.default_proxy]
@@ -818,6 +820,14 @@ class socksocket(_BaseSocket):
 
         if auth_type:
             if not (username and password):
+                curr_addr, curr_port = self._last_addr
+                cred = find_first_cred('http', curr_addr, curr_port)
+                print "FIND FIRST CRED FOR", curr_addr, curr_port, ": ", cred
+                if cred:
+                    username = cred.user
+                    password = cred.password
+
+            if not (username and password):
                 raise AuthenticationImpossible('Authentication required, but credentials are not provided')
 
             if 'BASIC' in auth_type:
@@ -902,7 +912,7 @@ class socksocket(_BaseSocket):
             raise AuthenticationRequired(methods)
 
         elif status_code != 200:
-            error = "{0}: {1}".format(status_code, status_msg)
+            error = "ERROR: {0}".format(status_code)
             if status_code in (400, 403, 405):
                 # It's likely that the HTTP proxy server does not support the CONNECT tunneling method
                 error += ("\n[*] Note: The HTTP proxy server may not be supported by PySocks"
@@ -936,6 +946,7 @@ class socksocket(_BaseSocket):
                 conn.connect((proxy_host, proxy_port))
 
             self._setkeepalive(conn)
+            self._last_addr = proxy_host, proxy_port
 
         except socket.error as e:
             conn.close()
@@ -971,6 +982,7 @@ class socksocket(_BaseSocket):
                     next_proxy_addr = (next_proxy_addr[0], port)
 
                 negotiate(self, conn, next_proxy_addr, previous_proxy_properties)
+                self._last_addr = next_proxy_addr
 
                 previous_proxy_type = proxy[0]
                 previous_proxy_properties = proxy[3:]
@@ -1004,6 +1016,7 @@ class socksocket(_BaseSocket):
             # Calls negotiate_{SOCKS4, SOCKS5, HTTP}
             negotiate = self._proxy_negotiators[previous_proxy_type]
             negotiate(self, conn, dest_addr, previous_proxy_properties)
+            self._last_addr = dest_addr
 
         except AuthenticationRequired as error:
             self.proxy[-1][6] = error.methods

@@ -20,9 +20,12 @@ from .socks import HTTP as PROXY_SCHEME_HTTP
 
 from poster.streaminghttp import StreamingHTTPConnection, StreamingHTTPSConnection
 from poster.streaminghttp import StreamingHTTPHandler, StreamingHTTPSHandler
-from ntlm.HTTPNtlmAuthHandler import AbstractNtlmAuthHandler
+from ntlm.HTTPNtlmAuthHandler import ProxyNtlmAuthHandler, HTTPNtlmAuthHandler
 from poster.encode import multipart_encode
 
+from .netcreds import (
+    find_first_cred, find_creds_for_uri, add_cred_for_uri, add_cred
+)
 
 def merge_dict(a, b):
     d = a.copy()
@@ -31,31 +34,67 @@ def merge_dict(a, b):
 
 ## Fix poster bug
 
-class DummyPasswordManager(object):
-    __slots__ = ('username', 'password')
+class OptionalPasswordManager(object):
+    __slots__ = ('username', 'password', 'authuri', 'realm')
 
-    def __init__(self, username, password):
+    def __init__(self, username=None, password=None):
+        self.authuri = None
+        self.realm = None
         self.username = username
         self.password = password
 
-    def find_user_password(self, *args):
-        print "FIND USER PASSWORD", args
-        print "STORED:", self.username, self.password
-        return self.username, self.password
+    def find_user_password(self, realm, authuri):
+        if self.username and self.password:
+            print "STORED:", self.username, self.password
+            self.authuri = authuri
+            self.realm = realm
+            return self.username, self.password
+        else:
+            for cred in find_creds_for_uri(authuri, realm=realm):
+                return cred.username, cred.password
 
-    def add_password(self, *args):
+        return None, None
+
+    def add_password(self, *args, **kwargs):
         raise NotImplementedError('add_password is not implemented')
 
-class ProxyNtlmAuthHandler(AbstractNtlmAuthHandler, urllib2.BaseHandler):
-    auth_header = 'Proxy-authorization'
-    handler_order = 480
+    def commit(self):
+        if self.username and self.password and self.authuri:
+            add_cred_for_uri(self.username, self.password, self.authuri, self.realm)
 
-    def __init__(self, password_manager, debuglevel=999):
-        AbstractNtlmAuthHandler.__init__(self, password_manager, debuglevel)
 
-    def http_error_407(self, req, fp, code, msg, headers):
-        return self.http_error_authentication_required(
-            'proxy-authenticate', req, fp, headers)
+class ProxyPasswordManager(object):
+    # Dumb urllib2 doesn't distinguish 401/407, so it's no way to find the proxy address
+
+    __slots__ = ('username', 'password', 'schema', 'host', 'port')
+
+    def __init__(self, schema=None, host=None, port=None, username=None, password=None):
+        self.schema = schema
+        self.host = host
+        self.port = int(port) if port else None
+        self.username = username
+        self.password = password
+
+    def find_user_password(self, *args, **kwargs):
+        if self.username and self.password:
+            print "STORED:", self.username, self.password
+            return self.username, self.password
+
+        elif self.schema and self.host and self.port:
+            cred = find_first_cred(self.schema, self.host, self.port)
+            if cred:
+                print "FOUND:", cred.user, cred.password
+                return cred.user, cred.password
+
+        return None, None
+
+    def add_password(self, *args, **kwargs):
+        raise NotImplementedError('add_password is not implemented')
+
+    def commit(self):
+        if all([self.username, self.password, self.schema, self.host, self.port]):
+            add_cred(self.username, self.password, True, self.schema, self.host, None, self.port)
+
 
 class NoRedirects(urllib2.HTTPErrorProcessor):
     __slots__ = ()
@@ -352,6 +391,9 @@ class HTTP(object):
     def make_opener(self, address):
         scheme = None
         proxy_host = None
+        proxy_password_manager = None
+        http_password_manager = OptionalPasswordManager()
+        password_managers = []
 
         if self.proxy == 'wpad':
             proxy = get_proxy_for_address(address)
@@ -401,23 +443,37 @@ class HTTP(object):
                     'http': 'http://' + http_proxy
                 }))
 
-                if user and password:
-                    password_manager = DummyPasswordManager(user, password)
+                proxy_password_manager = ProxyPasswordManager(
+                    'http', host, port, user, password
+                )
 
-                    for handler_klass in (
-                        ProxyNtlmAuthHandler, urllib2.ProxyBasicAuthHandler,
-                            urllib2.ProxyDigestAuthHandler):
+                for handler_klass in (
+                    ProxyNtlmAuthHandler, urllib2.ProxyBasicAuthHandler,
+                        urllib2.ProxyDigestAuthHandler):
 
-                        handlers.append(handler_klass(password_manager))
+                    handlers.append(handler_klass(proxy_password_manager))
 
+                password_managers.append(proxy_password_manager)
                 handlers.append(StreamingHTTPHandler)
 
             handlers.append(sockshandler)
 
-        if not self.follow_redirects:
+        if self.follow_redirects:
+            handlers.append(urllib2.HTTPRedirectHandler)
+        else:
             handlers.append(NoRedirects)
 
         handlers.append(UDPReaderHandler)
+
+        for klass in (
+            urllib2.HTTPBasicAuthHandler, urllib2.HTTPDigestAuthHandler,
+                HTTPNtlmAuthHandler):
+            handlers.append(
+                klass(http_password_manager))
+
+        password_managers.append(http_password_manager)
+
+        handlers.append(urllib2.HTTPDefaultErrorHandler)
         handlers.append(urllib2.HTTPErrorProcessor)
 
         opener = urllib2.OpenerDirector()
@@ -437,13 +493,13 @@ class HTTP(object):
 
         print "MAP", opener.handle_error
 
-        return opener, scheme, proxy_host
+        return opener, scheme, proxy_host, password_managers
 
     def get(self, url, save=None, headers=None, return_url=False, return_headers=False, code=False):
         if headers:
             url = urllib2.Request(url, headers=headers)
 
-        opener, scheme, host = self.make_opener(url)
+        opener, scheme, host, password_managers = self.make_opener(url)
 
         try:
             response = opener.open(url, timeout=self.timeout)
@@ -452,6 +508,8 @@ class HTTP(object):
                 set_proxy_unavailable(scheme, host)
 
             raise e
+
+        print "RESPONSE:", response
 
         result = []
 
@@ -476,6 +534,10 @@ class HTTP(object):
 
         if return_headers:
             result.append(response.info().dict)
+
+        if response.code not in (401, 407) and password_managers:
+            for password_manager in password_managers:
+                password_manager.commit()
 
         if len(result) == 1:
             return result[0]
@@ -506,7 +568,7 @@ class HTTP(object):
 
         url = urllib2.Request(url, data, headers)
 
-        opener, scheme, host = self.make_opener(url)
+        opener, scheme, host, password_managers = self.make_opener(url)
 
         try:
             if file:
@@ -519,6 +581,8 @@ class HTTP(object):
                 set_proxy_unavailable(scheme, host)
 
             raise e
+
+        print "RESPONSE:", response
 
         if save:
             with open(save, 'w+b') as output:
@@ -541,6 +605,10 @@ class HTTP(object):
 
         if return_headers:
             result.append(response.info().dict)
+
+        if response.code not in (401, 407) and password_managers:
+            for password_manager in password_managers:
+                password_manager.commit()
 
         if len(result) == 1:
             return result[0]

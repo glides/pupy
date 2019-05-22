@@ -2,7 +2,7 @@
 
 __all__ = (
     'NetCreds',
-    'add_cred', 'find_creds',
+    'add_cred', 'add_cred_for_uri', 'find_creds',
     'find_first_cred', 'find_all_creds', 'find_creds_for_uri',
     'export'
 )
@@ -40,9 +40,14 @@ def are_different(first, second):
         if first not in second:
             return True
 
-    if type(first) is set and type(second) is not set:
+    elif type(first) is set and type(second) is not set:
         if second not in first:
             return True
+
+    elif type(first) is set and type(second) is set:
+        for x in first:
+            if x in second:
+                return False
 
     return first != second
 
@@ -85,6 +90,9 @@ class AuthInfo(object):
         except AddrFormatError:
             self.ip = None
             self.hostname = address
+
+        if self.port:
+            self.port = int(self.port)
 
         if self.ip is None and self.hostname:
             self.ip = resolve_ip(self.hostname, self.port)
@@ -155,7 +163,10 @@ class AuthInfo(object):
         return result
 
     def as_tuple(self):
-        return tuple((k,v) for k,v in self.as_dict().iteritems())
+        return tuple(
+            (k, tuple(str(x) for x in v) if hasattr(v, '__iter__') else v)
+            for k,v in self.as_dict().iteritems()
+        )
 
 
 class NetCreds(object):
@@ -188,15 +199,15 @@ class NetCreds(object):
             AuthInfo(
                 username or parsed.username,
                 password or parsed.password,
-                True, parsed.schema, parsed.hostname,
+                True, parsed.scheme, parsed.hostname,
                 parsed.port, realm
             )
         )
 
-    def find_creds_for_uri(authuri, username=None, realm=None, domain=None):
+    def find_creds_for_uri(self, authuri, username=None, realm=None, domain=None):
         parsed = urlparse(authuri)
         for cred in self.find_creds(
-            parsed.schema, parsed.hostname, username or parsed.username,
+            parsed.scheme, parsed.hostname, parsed.port, username or parsed.username,
                 realm, domain, parsed.path):
 
             yield cred
@@ -216,11 +227,12 @@ class NetCreds(object):
             ip = None
             hostname = None
 
+        if port:
+            port = int(port)
+
         if username is not None:
             if '\\' in username and domain is None:
                 domain, username = username.split('\\', 1)
-
-        found_cred = None
 
         for cred in sorted(self.creds, key=lambda x: x._weight(), reverse=True):
             pairs = (
@@ -237,6 +249,7 @@ class NetCreds(object):
 
             for (first, second) in pairs:
                 if are_different(first, second):
+                    print "DIFFERENT", first, type(first), second, type(second)
                     different = True
                     break
 
@@ -260,14 +273,15 @@ class NetCreds(object):
             if different:
                 continue
 
-                (parsed.path, cred.path)
-
             yield cred
 
     # Urllib2 HTTPPasswordMgr
     def find_user_password(self, realm, authuri):
         for cred in self.find_creds(authuri, realm=realm):
             return cred.password
+
+    def add_password(self, realm, uri, user, passwd):
+        self.add_cred(uri, passwd, user, realm)
 
 
 def add_cred(
@@ -279,6 +293,11 @@ def add_cred(
         username, password, domain, schema, hostname,
         ip, port, realm, path, **kwargs
     )
+
+
+def add_cred_for_uri(username, password, authuri, realm=None):
+    manager = NetCreds.get_default_creds_manager()
+    manager.add_uri(authuri, password, username, realm)
 
 
 def find_creds(
@@ -297,7 +316,7 @@ def remove_creds(
 
     manager = NetCreds.get_default_creds_manager()
     to_remove = set()
-    
+
     for cred in manager.find_creds(
             schema, address, port, username, realm, domain, path):
         to_remove.add(cred)
@@ -309,8 +328,8 @@ def remove_creds(
 def clear_creds():
     manager = NetCreds.get_default_creds_manager()
     manager.creds.clear()
-        
-        
+
+
 def find_first_cred(
     schema=None, address=None, port=None, username=None, realm=None,
         domain=None, path=None):
@@ -325,10 +344,10 @@ def find_all_creds(
         domain=None, path=None, as_tuple=False):
 
     result = []
-    
+
     for cred in find_creds(
         schema=None, address=None, port=None, username=None,
-            realm=None, domain=None, path=None)):
+            realm=None, domain=None, path=None):
 
         if as_tuple:
             result.append(cred.as_tuple())
