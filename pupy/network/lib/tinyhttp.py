@@ -2,6 +2,7 @@
 
 import urllib2
 import urllib
+import cookielib
 import urlparse
 import httplib
 import ssl
@@ -96,6 +97,75 @@ class ProxyPasswordManager(object):
             add_cred(self.username, self.password, True, self.schema, self.host, None, self.port)
 
 
+class HTTPContext(urllib2.BaseHandler):
+    default = None
+    
+    __slots__ = ('cookies', 'headers')
+
+    handler_order = 999
+
+    @staticmethod
+    def get_default():
+        if HTTPContext.default is None:
+            HTTPContext.default = HTTPContext()
+
+        return HTTPContext.default
+    
+    def __init__(self):
+        print "HTTPContext instantiated"
+        self.cookies = cookielib.CookieJar()
+        self.headers = {}
+        
+    def http_request(self, request):
+        self.cookies.add_cookie_header(request)
+        host = request.get_host()
+
+        print "HTTPContext request", request, host, self.headers.keys()
+        if host in self.headers:
+            for header, value in self.headers[host].iteritems():
+                print "SET HEADER FROM CACHE", host, header, value
+                request.add_header(header, value)
+
+        return request
+
+    def http_response(self, request, response):
+        self.cookies.extract_cookies(response, request)
+        
+        host = request.get_host()
+        headers = request.headers
+        code = response.headers
+
+        self._process(host, code, headers)
+        return response
+
+    def update_from_error(self, error):
+        host = urlparse.urlparse(error.url).hostname
+        headers = error.hdrs
+        code = error.code
+
+        self._process(host, code, headers)
+
+    def _process(self, host, code, headers):
+        print "HTTPContext response", host, code
+        for header in ('proxy-authorization', 'authorization'):
+            if header in headers:
+                if code in (401, 407):
+                    if host in self.headers and header in self.headers[host]:
+                        print "DELETE HEADER", host, header
+                        del self.headers[host][header]
+                        if not self.headers[host]:
+                            del self.headers[host]
+                else:
+                    if host not in self.headers:
+                        self.headers[host] = {}
+
+                    self.headers[host][header] = request.get_headers(header)
+                    print "STORE HEADER", host, header, self.headers[host][header]
+
+    https_request = http_request
+    https_response = http_response     
+
+            
 class NoRedirects(urllib2.HTTPErrorProcessor):
     __slots__ = ()
 
@@ -473,6 +543,10 @@ class HTTP(object):
 
         password_managers.append(http_password_manager)
 
+        context = HTTPContext.get_default()
+        
+        handlers.append(context)
+
         handlers.append(urllib2.HTTPDefaultErrorHandler)
         handlers.append(urllib2.HTTPErrorProcessor)
 
@@ -493,25 +567,46 @@ class HTTP(object):
 
         print "MAP", opener.handle_error
 
-        return opener, scheme, proxy_host, password_managers
+        return opener, scheme, proxy_host, password_managers, context
 
     def get(self, url, save=None, headers=None, return_url=False, return_headers=False, code=False):
         if headers:
             url = urllib2.Request(url, headers=headers)
 
-        opener, scheme, host, password_managers = self.make_opener(url)
+        opener, scheme, host, password_managers, context = self.make_opener(url)
 
+        result = []
+        
         try:
             response = opener.open(url, timeout=self.timeout)
+            
         except ProxyConnectionError as e:
             if self.proxy == 'wpad':
                 set_proxy_unavailable(scheme, host)
 
             raise e
 
-        print "RESPONSE:", response
-
-        result = []
+        except urllib2.HTTPError as e:
+            context.update_from_error(e)
+            
+            if not return_headers:
+                raise
+            
+            result = [e.fp.read() if e.fp.read else '']
+                        
+            if return_url:
+                result.append(e.url)
+             
+            if code:
+                result.append(e.code)
+             
+            if return_headers:
+                result.append(e.hdrs.dict)
+             
+            if len(result) == 1:
+                return result[0]
+            else:
+                return tuple(result)
 
         if save:
             with open(save, 'w+b') as output:
@@ -568,7 +663,7 @@ class HTTP(object):
 
         url = urllib2.Request(url, data, headers)
 
-        opener, scheme, host, password_managers = self.make_opener(url)
+        opener, scheme, host, password_managers, context = self.make_opener(url)
 
         try:
             if file:
@@ -576,11 +671,32 @@ class HTTP(object):
                     response = opener.open(url, body, timeout=self.timeout)
             else:
                 response = opener.open(url, timeout=self.timeout)
+
         except ProxyConnectionError as e:
             if self.proxy == 'wpad':
                 set_proxy_unavailable(scheme, host)
 
             raise e
+
+        except urllib2.HTTPError as e:
+            if not return_headers:
+                raise
+
+            result = [e.fp.read() if e.fp.read else '']
+            
+            if return_url:
+                result.append(e.url)
+             
+            if code:
+                result.append(e.code)
+             
+            if return_headers:
+                result.append(e.hdrs.dict)
+             
+            if len(result) == 1:
+                return result[0]
+            else:
+                return tuple(result)
 
         print "RESPONSE:", response
 

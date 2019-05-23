@@ -9,6 +9,7 @@ __all__ = (
 
 from socket import getaddrinfo, gaierror
 from urlparse import urlparse
+
 from netaddr import IPAddress, AddrFormatError
 
 _TARGET_WEIGHTS = {
