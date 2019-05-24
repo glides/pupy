@@ -250,7 +250,6 @@ class NetCreds(object):
 
             for (first, second) in pairs:
                 if are_different(first, second):
-                    print "DIFFERENT", first, type(first), second, type(second)
                     different = True
                     break
 

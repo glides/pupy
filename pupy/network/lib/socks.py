@@ -822,7 +822,6 @@ class socksocket(_BaseSocket):
             if not (username and password):
                 curr_addr, curr_port = self._last_addr
                 cred = find_first_cred('http', curr_addr, curr_port)
-                print "FIND FIRST CRED FOR", curr_addr, curr_port, ": ", cred
                 if cred:
                     username = cred.user
                     password = cred.password

@@ -46,7 +46,6 @@ class OptionalPasswordManager(object):
 
     def find_user_password(self, realm, authuri):
         if self.username and self.password:
-            print "STORED:", self.username, self.password
             self.authuri = authuri
             self.realm = realm
             return self.username, self.password
@@ -78,13 +77,11 @@ class ProxyPasswordManager(object):
 
     def find_user_password(self, *args, **kwargs):
         if self.username and self.password:
-            print "STORED:", self.username, self.password
             return self.username, self.password
 
         elif self.schema and self.host and self.port:
             cred = find_first_cred(self.schema, self.host, self.port)
             if cred:
-                print "FOUND:", cred.user, cred.password
                 return cred.user, cred.password
 
         return None, None
@@ -95,7 +92,6 @@ class ProxyPasswordManager(object):
     def commit(self):
         if all([self.username, self.password, self.schema, self.host, self.port]):
             add_cred(self.username, self.password, True, self.schema, self.host, None, self.port)
-
 
 class HTTPContext(urllib2.BaseHandler):
     default = None
@@ -112,7 +108,6 @@ class HTTPContext(urllib2.BaseHandler):
         return HTTPContext.default
     
     def __init__(self):
-        print "HTTPContext instantiated"
         self.cookies = cookielib.CookieJar()
         self.headers = {}
         
@@ -120,10 +115,8 @@ class HTTPContext(urllib2.BaseHandler):
         self.cookies.add_cookie_header(request)
         host = request.get_host()
 
-        print "HTTPContext request", request, host, self.headers.keys()
         if host in self.headers:
             for header, value in self.headers[host].iteritems():
-                print "SET HEADER FROM CACHE", host, header, value
                 request.add_header(header, value)
 
         return request
@@ -146,12 +139,10 @@ class HTTPContext(urllib2.BaseHandler):
         self._process(host, code, headers)
 
     def _process(self, host, code, headers):
-        print "HTTPContext response", host, code
         for header in ('proxy-authorization', 'authorization'):
             if header in headers:
                 if code in (401, 407):
                     if host in self.headers and header in self.headers[host]:
-                        print "DELETE HEADER", host, header
                         del self.headers[host][header]
                         if not self.headers[host]:
                             del self.headers[host]
@@ -160,7 +151,6 @@ class HTTPContext(urllib2.BaseHandler):
                         self.headers[host] = {}
 
                     self.headers[host][header] = request.get_headers(header)
-                    print "STORE HEADER", host, header, self.headers[host][header]
 
     https_request = http_request
     https_response = http_response     
@@ -504,8 +494,6 @@ class HTTP(object):
 
             handlers = []
 
-            print "PROXY INFO", proxy
-
             if scheme == PROXY_SCHEME_HTTP:
                 http_proxy = proxy_host
 
@@ -555,7 +543,6 @@ class HTTP(object):
             if isinstance(h, (types.ClassType, type)):
                 h = h()
 
-            print "ADD_HANDLER:", h
             opener.add_handler(h)
 
         if type(self.headers) == dict:
@@ -564,8 +551,6 @@ class HTTP(object):
             ]
         else:
             opener.addheaders = self.headers
-
-        print "MAP", opener.handle_error
 
         return opener, scheme, proxy_host, password_managers, context
 
@@ -697,8 +682,6 @@ class HTTP(object):
                 return result[0]
             else:
                 return tuple(result)
-
-        print "RESPONSE:", response
 
         if save:
             with open(save, 'w+b') as output:
