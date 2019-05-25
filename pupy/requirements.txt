@@ -28,6 +28,7 @@ requests
 tornado==v5.1.1
 poster
 win_inet_pton
+python-ntlm
 scandir
 msgpack
 hexdump
