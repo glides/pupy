@@ -7,6 +7,7 @@ class NetCreds(PupyModule):
     ''' Manage saved authentication information '''
 
     @classmethod
+    @config(cat='creds')
     def init_argparse(cls):
         cls.arg_parser = PupyArgumentParser(
             prog='netcreds', description=cls.__doc__
