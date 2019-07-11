@@ -68,47 +68,47 @@ typedef DWORD (WINAPI * EXECUTEX64)( X64FUNCTION pFunction, DWORD dwParameter );
 // The context used for injection via migrate_via_apcthread
 typedef struct _APCCONTEXT
 {
- 	union
-	{
-		LPVOID lpStartAddress;
-		BYTE bPadding1[8];
-	} s;
+     union
+    {
+        LPVOID lpStartAddress;
+        BYTE bPadding1[8];
+    } s;
 
-	union
-	{
- 		LPVOID lpParameter;
-		BYTE bPadding2[8];
-	} p;
+    union
+    {
+         LPVOID lpParameter;
+        BYTE bPadding2[8];
+    } p;
 
-	BYTE bExecuted;
+    BYTE bExecuted;
 
 } APCCONTEXT, * LPAPCCONTEXT;
 
 // The context used for injection via migrate_via_remotethread_wow64
 typedef struct _WOW64CONTEXT
 {
-	union
-	{
- 		HANDLE hProcess;
-		BYTE bPadding2[8];
-	} h;
+    union
+    {
+         HANDLE hProcess;
+        BYTE bPadding2[8];
+    } h;
 
- 	union
-	{
-		LPVOID lpStartAddress;
-		BYTE bPadding1[8];
-	} s;
+     union
+    {
+        LPVOID lpStartAddress;
+        BYTE bPadding1[8];
+    } s;
 
-	union
-	{
- 		LPVOID lpParameter;
-		BYTE bPadding2[8];
-	} p;
-	union
-	{
-		HANDLE hThread;
-		BYTE bPadding2[8];
-	} t;
+    union
+    {
+         LPVOID lpParameter;
+        BYTE bPadding2[8];
+    } p;
+    union
+    {
+        HANDLE hThread;
+        BYTE bPadding2[8];
+    } t;
 } WOW64CONTEXT, * LPWOW64CONTEXT;
 
 //===============================================================================================//

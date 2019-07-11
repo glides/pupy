@@ -17,6 +17,9 @@ from network.lib.base_launcher import (
     LauncherError, LauncherArgumentParser, BaseLauncher
 )
 
+from network.conf import transports
+
+
 from . import getLogger
 
 logger = getLogger('connect')
@@ -25,6 +28,7 @@ logger = getLogger('connect')
 class ConnectLauncher(BaseLauncher):
     """ simple launcher that uses TCP connect with a chosen transport """
 
+    name = 'connect'
     credentials = ['SSL_BIND_CERT']
 
     __slots__ = (
@@ -46,7 +50,7 @@ class ConnectLauncher(BaseLauncher):
             '--host arguments to attempt to connect to multiple IPs'
         )
         cls.arg_parser.add_argument(
-            '-t', '--transport', choices=cls.transports, default="ssl",
+            '-t', '--transport', choices=transports, default="ssl",
             help='The transport to use'
         )
         cls.arg_parser.add_argument(

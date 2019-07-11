@@ -7,21 +7,21 @@
 #ifdef DEBUG
 
 static inline int dprint(const char *fmt, ...) {
-	va_list args;
-	va_start (args, fmt);
-	int n = vfprintf(stderr, fmt, args);
-	va_end (args);
-	fflush(stdout);
-	return n;
+    va_list args;
+    va_start (args, fmt);
+    int n = vfprintf(stderr, fmt, args);
+    va_end (args);
+    fflush(stdout);
+    return n;
 }
 
 static inline int dfprint(FILE *stream, const char *fmt, ...) {
-	va_list args;
-	va_start (args, fmt);
-	int n = vfprintf(stream, fmt, args);
-	va_end (args);
-	fflush(stream);
-	return n;
+    va_list args;
+    va_start (args, fmt);
+    int n = vfprintf(stream, fmt, args);
+    va_end (args);
+    fflush(stream);
+    return n;
 }
 
 #define DOC(x) x
