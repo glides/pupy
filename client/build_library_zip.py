@@ -1,4 +1,4 @@
-# -*- encoding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 import site
 import sys
@@ -15,8 +15,10 @@ from distutils.core import setup
 import additional_imports
 
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+THIS = os.path.abspath(__file__)
+ROOT = os.path.dirname(os.path.dirname(THIS))
 
+print "THIS:", THIS
 print "ROOT: ", ROOT
 
 PATCHES = os.path.join(ROOT, 'pupy', 'library_patches')
