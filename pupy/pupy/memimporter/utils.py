@@ -56,11 +56,19 @@ def find_writable_folder(folders, validate=None):
 
 def load_library_common(
     fd, filepath, content, name,
-        dlopen=False, initfuncname=None, post_load_hook=None):
+        dlopen=False, initfuncname=None, post_load_hook=None,
+        close=False):
 
-    fd.write(content)
-    fd.flush()
+    r = fd.write(content)
 
+    if close:
+        fd.close()
+    else:
+        fd.flush()
+
+    pupy.dprint('load_library_common: Written {} to {}@{}: {} (closed={})'.format(
+        len(content), name, filepath, r, close))
+        
     if dlopen:
         handle = ctypes.CDLL(filepath)
         if post_load_hook:
