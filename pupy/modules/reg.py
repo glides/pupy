@@ -2,8 +2,12 @@
 
 __class_name__ = 'reg'
 
+from threading import Event
+
 from pupylib.PupyModule import config, PupyModule, PupyArgumentParser
-from pupylib.PupyOutput import Color, List, Table, MultiPart, TruncateToTerm
+from pupylib.PupyOutput import (
+    Color, List, Table, Line, MultiPart, TruncateToTerm
+)
 
 TYPES = (
     'NONE', 'SZ', 'EXPAND_SZ', 'BINARY', 'LE32', 'BE32',
@@ -29,15 +33,17 @@ TYPE_COLORS = {
 def as_unicode(x):
     if x is None:
         return None
-    elif type(x) is str:
-        return x.decode('utf-8')
-    elif type(x) is unicode:
+    elif isinstance(x, unicode):
         return x
+    elif isinstance(x, str):
+        return x.decode('utf-8')
     else:
         return unicode(x)
 
 def fix_key(x):
     x = as_unicode(x)
+    x = x.strip()
+
     if x is None:
         return x
     elif '\\' not in x:
@@ -52,6 +58,8 @@ def fix_key(x):
 @config(cat='admin', compatibilities=['windows'])
 class reg(PupyModule):
     '''Search/list/get/set/delete registry keys/values '''
+
+    __slots__ = ('interrupt_cb', '_last_key')
 
     dependencies = {
         'windows': ['reg']
@@ -121,9 +129,16 @@ class reg(PupyModule):
         search.add_argument('term', help='Term to search')
         search.set_defaults(func=cls.search)
 
+    def __init__(self, *args, **kwargs):
+        super(reg, self).__init__(*args, **kwargs)
+        self.interrupt_cb = None
+
     def run(self, args):
+        self.interrupt_cb = None
+        self._last_key = None
+
         try:
-            if args.key:
+            if getattr(args, 'key', None):
                 args.key = fix_key(args.key)
 
             args.func(self, args)
@@ -146,6 +161,7 @@ class reg(PupyModule):
 
         for record in results:
             is_key, key, rest = record[0], record[1], record[2:]
+            key = as_unicode(key)
 
             if remove and key.startswith(remove):
                 key = key[len(remove)+1:]
@@ -159,13 +175,20 @@ class reg(PupyModule):
             ktype = TYPES[ktype]
             color = TYPE_COLORS[ktype]
 
-            if not wide and type(value) in (str,unicode):
+            name = as_unicode(name)
+
+            if ktype == 'BINARY':
+                value = 'hex:' + value.encode('hex')
+            else:
+                value = as_unicode(value)
+
+            if not wide and isinstance(value, (str,unicode)):
                 value = value.strip()
 
             values.append({
                 'KEY': Color(key, color),
                 'NAME': Color(name, color),
-                'VALUE': Color(value if ktype != 'BINARY' else repr(value), color),
+                'VALUE': Color(value, color),
                 'TYPE': Color(ktype, color)
             })
 
@@ -193,7 +216,11 @@ class reg(PupyModule):
             self.error('No such key')
             return
 
-        self._format_multi(result, wide=args.wide, remove=args.key)
+        try:
+            self._format_multi(result, wide=args.wide, remove=args.key)
+        except:
+            import traceback
+            traceback.print_exc()
 
     def get(self, args):
         get = self.client.remote('reg', 'get')
@@ -230,15 +257,58 @@ class reg(PupyModule):
         else:
             self.error('No such key')
 
+    def interrupt(self):
+        if self.interrupt_cb is None:
+            self.warning('Interrupt is not supported')
+            return
+
+        self.interrupt_cb()
+
+    def _format_by_one(self, record):
+        is_key, key, rest = record[0], record[1], record[2:]
+
+        if is_key is None:
+            self.error(key)
+            return
+
+        if self._last_key != key:
+            self._last_key = key
+            self.log(Line('KEY:', Color(key, 'yellow')))
+
+        if is_key:
+            return
+
+        name, value, ktype = rest
+
+        ktype = TYPES[ktype]
+        color = TYPE_COLORS[ktype]
+
+        if type(value) in (str,unicode):
+            value = value.strip()
+
+        self.log(
+            List([
+                Line('Value:', Color(
+                    value if ktype != 'BINARY' else repr(value), color)),
+                Line('Type:', Color(ktype, color)),
+            ], caption=Color(' > ' + name, color) if name else None)
+        )
+
     def search(self, args):
-        search = self.client.remote('reg', 'search')
-        results = search(
+        search = self.client.remote('reg', 'search', False)
+
+        completed = Event()
+
+        self.interrupt_cb = search(
+            self._format_by_one, completed.set,
             as_unicode(args.term),
-            tuple([as_unicode(x.strip()) for x in args.roots.split(',')]),
+            tuple(fix_key(x) for x in args.roots.split(',')),
             args.exclude_key_name, args.exclude_value_name,
             args.exclude_value,
             args.regex, args.ignorecase,
             args.first, args.equals
         )
 
-        self._format_multi(results, wide=args.wide)
+        self.info('Searching...')
+        completed.wait()
+        self.info('Done')

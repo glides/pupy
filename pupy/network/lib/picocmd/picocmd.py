@@ -322,12 +322,14 @@ class SystemStatus(Command):
         )
 
     def __repr__(self):
-        return ('{{SS: CPU:{cpu}% MEM:{mem}% L:{listen} ' + \
-                    'E:{remote} U:{users} I:{idle}}}').format(**self.get_dict())
+        return (
+            '{{SS: CPU:{cpu}% MEM:{mem}% L:{listen} ' + \
+                'E:{remote} U:{users} I:{idle}}}').format(
+                    **self.get_dict())
 
 
 class Ack(Command):
-    __slots__ = ('amount')
+    __slots__ = ('amount',)
 
     def __init__(self, amount=0):
         self.amount = amount
@@ -355,7 +357,7 @@ class Idle(Command):
 
 
 class Sleep(Command):
-    __slots__ = ('timeout')
+    __slots__ = ('timeout',)
 
     @staticmethod
     def unpack(data):
@@ -462,7 +464,7 @@ class Policy(Command):
 
 
 class Kex(Command):
-    __slots__ = ('parcel')
+    __slots__ = ('parcel',)
 
     def __init__(self, parcel):
         self.parcel = parcel
@@ -1004,7 +1006,7 @@ class OnlineStatus(Command):
 
 class PortQuizPort(Command):
 
-    __slots__ = ('ports')
+    __slots__ = ('ports',)
 
     @staticmethod
     def unpack(data):
@@ -1134,6 +1136,10 @@ class ConnectablePort(Command):
         return '{{OPEN: {}:{}}}'.format(self.ip, ','.join(str(x) for x in self.ports))
 
 
+def isset(flags, flag):
+    return flags & flag == flag
+
+
 class SystemInfoEx(Command):
     __slots__ = (
         'version',
@@ -1236,6 +1242,9 @@ class SystemInfoEx(Command):
 
         flags = 0
 
+        internal_ip_packed = b''
+        external_ip_packed = b''
+
         if self.internet:
             flags |= SystemInfoEx.IS_ONLINE
 
@@ -1244,10 +1253,14 @@ class SystemInfoEx(Command):
             if self.internal_ip.version == 6:
                 flags |= SystemInfoEx.INTERNAL_IP_IS_IPV6
 
+            internal_ip_packed = self.internal_ip.packed
+
         if self.external_ip is not None:
             flags |= SystemInfoEx.HAS_EXTERNAL_IP
             if self.external_ip.version == 6:
                 flags |= SystemInfoEx.EXTERNAL_IP_IS_IPV6
+
+            external_ip_packed = self.external_ip.packed
 
         return b''.join([
             chr(self.version),
@@ -1256,13 +1269,14 @@ class SystemInfoEx(Command):
             to_bytes(self.node, 6),
             struct.pack('>I', int(time.mktime(self.boottime.timetuple()))),
             chr(flags),
-            self.internal_ip.packed if self.internal_ip else b'',
-            self.external_ip.packed if self.external_ip else b'',
+            internal_ip_packed,
+            external_ip_packed,
         ])
 
     @staticmethod
     def _unpack_v1(data):
         version = ord(data[0])
+
         os_arch = ord(data[1])
         os = SystemInfoEx.well_known_os_names.decode((os_arch >> 4) & 0b1111)
         arch = SystemInfoEx.well_known_cpu_archs.decode(os_arch & 0b1111)
@@ -1284,16 +1298,16 @@ class SystemInfoEx(Command):
 
         internet = bool(flags & SystemInfoEx.IS_ONLINE)
 
-        if flags & SystemInfoEx.HAS_INTERNAL_IP:
-            if flags & SystemInfoEx.INTERNAL_IP_IS_IPV6:
+        if isset(flags, SystemInfoEx.HAS_INTERNAL_IP):
+            if isset(flags, SystemInfoEx.INTERNAL_IP_IS_IPV6):
                 internal_ip = unpack_ip_address(data[consumed:consumed+16])
                 consumed += 16
             else:
                 internal_ip = unpack_ip_address(data[consumed:consumed+4])
                 consumed += 4
 
-        if flags & SystemInfoEx.HAS_EXTERNAL_IP:
-            if flags & SystemInfoEx.EXTERNAL_IP_IS_IPV6:
+        if isset(flags, SystemInfoEx.HAS_EXTERNAL_IP):
+            if isset(flags, SystemInfoEx.EXTERNAL_IP_IS_IPV6):
                 external_ip = unpack_ip_address(data[consumed:consumed+16])
                 consumed += 16
             else:
@@ -1314,7 +1328,7 @@ class SystemInfoEx(Command):
                 'SystemInfoEx: Unsupported version {}'.format(version))
 
     def __repr__(self):
-        return '{{SYS: OS={} ARCH={} NODE={:012X} IP={}/{} ' \
+        return '{{SYSEX: OS={} ARCH={} NODE={:012X} IP={}/{} ' \
             'BOOT={} INTERNET={}}}'.format(
                 self.os, self.arch, self.node, self.external_ip,
                 self.internal_ip, self.boottime.ctime(),
@@ -1652,7 +1666,7 @@ class Error(Command):
 
 
 class CustomEvent(Command):
-    __slots__ = ('eventid')
+    __slots__ = ('eventid',)
 
     def __init__(self, eventid):
         self.eventid = eventid
@@ -1686,7 +1700,7 @@ class ParcelInvalidPayload(Exception):
 
 class ParcelInvalidCommand(Exception):
 
-    __slots__ = ('command')
+    __slots__ = ('command',)
 
     def __init__(self, command):
         self.command = command
@@ -1697,7 +1711,7 @@ class ParcelInvalidCommand(Exception):
 
 class Parcel(object):
 
-    __slots__ = ('commands')
+    __slots__ = ('commands',)
 
     # Explicitly define commands. In other case make break something
 

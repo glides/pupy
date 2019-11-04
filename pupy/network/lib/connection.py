@@ -7,6 +7,9 @@ import time
 import traceback
 
 from rpyc.core import Connection, consts, brine
+from rpyc.core.consts import (
+    HANDLE_PING, HANDLE_CLOSE, HANDLE_GETROOT
+)
 from threading import Thread, Lock, current_thread
 from Queue import Queue, Full, Empty
 
@@ -18,6 +21,12 @@ syncqueuelogger = getLogger('syncqueue')
 
 from network.lib.ack import Ack
 from network.lib.buffer import Buffer
+
+
+FAST_CALLS = (
+    HANDLE_PING, HANDLE_CLOSE, HANDLE_GETROOT
+)
+
 
 ############# Monkeypatch brine to be buffer firendly #############
 
@@ -185,8 +194,8 @@ class SyncRequestDispatchQueue(object):
                 except Full:
                     if __debug__:
                         syncqueuelogger.debug(
-                            'Task not queued - no empty slots. Launch new worker'.format(self,
-                                                                                         self._pending_workers))
+                            'Task not queued - no empty slots. Launch new worker (%s, %s)'.format(
+                                self, self._pending_workers))
 
                         pass
 
@@ -239,9 +248,9 @@ class PupyConnection(Connection):
         self._sync_raw_exceptions = {}
 
         self._last_recv = time.time()
-        self._ping = False
-        self._ping_timeout = 30
-        self._serve_timeout = 10
+        self._ping = True
+        self._ping_timeout = 60
+        self._serve_timeout = 600
         self._last_ping = None
         self._default_serve_timeout = 5
         self._queue = SyncRequestDispatchQueue.get_queue()
@@ -324,8 +333,10 @@ class PupyConnection(Connection):
             raise
 
         if __debug__:
-            synclogger.debug('Sync request wait(%s): %s / %s:%s %s (%s)',
-                self, seq, *traceback.extract_stack()[-4])
+            trace = traceback.extract_stack()
+            if len(trace) >= 4:
+                synclogger.debug('Sync request wait(%s): %s / %s:%s %s (%s)',
+                    self, seq, *trace[-4])
 
         self._sync_events[seq].wait()
 
@@ -474,8 +485,10 @@ class PupyConnection(Connection):
             self._closed = True
 
         if __debug__:
-            logger.debug('Connection(%s) - close - start (at: %s:%s %s(%s))',
-                self, *traceback.extract_stack()[-2])
+            trace = traceback.extract_stack()
+            if len(trace) >= 2:
+                logger.debug('Connection(%s) - close - start (at: %s:%s %s(%s))',
+                    self, *trace[-2])
 
         try:
             self.buf_in.wake()
@@ -627,7 +640,7 @@ class PupyConnection(Connection):
         timeout = mintimeout
 
         if __debug__:
-            logger.debug('Serve(%s): start / timeout = %s / interval = %s / ping = %s / %s',
+            logger.debug('Serve(%s): start / timeout = %s / interval = %s / ping timeout = %s / %s',
                 self, timeout, interval, ping_timeout, self._last_ping)
 
         data = self._recv(timeout, wait_for_lock=False)
@@ -666,9 +679,14 @@ class PupyConnection(Connection):
                     logger.debug('Processing message request, type(%s): %s seq: %s - started',
                         self, args[0], seq)
 
-                self._queue(
-                    self._on_sync_request_exception,
-                    self._dispatch_request, seq, args)
+                handler = args[0]
+
+                if handler in FAST_CALLS:
+                    self._dispatch_request(seq, args)
+                else:
+                    self._queue(
+                        self._on_sync_request_exception,
+                        self._dispatch_request, seq, args)
 
             else:
                 if __debug__:

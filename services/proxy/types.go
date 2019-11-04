@@ -17,6 +17,14 @@ type (
 		close chan bool
 	}
 
+	KCPConn struct {
+		net.Conn
+		localId     [4]byte
+		remoteId    [4]byte
+		initialized bool
+		new_sent    bool
+	}
+
 	Listener struct {
 		Listener net.Listener
 		refcnt   int
@@ -34,6 +42,7 @@ type (
 		Protocol ListenerProtocol `msgpack:"prot"`
 		BindInfo string           `msgpack:"bind"`
 		Timeout  int              `msgpack:"timeout"`
+		MTU      int              `msgpack:"mtu"`
 	}
 
 	DNSRequest struct {
@@ -107,6 +116,24 @@ type (
 		Cert   string `msgpack:"cert"`
 		Key    string `msgpack:"key"`
 	}
+
+	KeepAlive struct {
+		Tick int64 `msgpack:"keepalive"`
+		Last bool  `msgpack:"last"`
+	}
+
+	NetReader struct {
+		mtu  int
+		in   net.Conn
+		out  net.Conn
+		err  error
+		wait chan error
+	}
+
+	NetForwarder struct {
+		pproxy net.Conn
+		remote net.Conn
+	}
 )
 
 const (
@@ -115,4 +142,8 @@ const (
 	TCP  ListenerProtocol = iota
 	KCP  ListenerProtocol = iota
 	TLS  ListenerProtocol = iota
+
+	KCP_NEW = 0x0
+	KCP_DAT = 0x1
+	KCP_END = 0x2
 )

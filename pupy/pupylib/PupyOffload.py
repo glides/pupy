@@ -19,6 +19,7 @@ try:
 except:
     logger = logging.getLogger('pproxy')
 
+KCP_MTU = 1400 - (24 + 5)
 
 COMMON_EXCEPTIONS = (
     errno.ECONNREFUSED, errno.ECONNRESET,
@@ -152,13 +153,14 @@ class PupyOffloadSocket(object):
         return getattr(self._sock, attr)
 
 class PupyOffloadAcceptor(object):
-    def __init__(self, manager, proto, port=None, extra={}):
+    def __init__(self, manager, proto, port=None, extra={}, mtu=0):
         self._manager = manager
         self._proto = proto
         self._host = None
         self._port = port
         self._conn = None
         self._extra = extra
+        self._mtu = mtu
         self.active = True
 
     def bind(self, addr):
@@ -182,15 +184,31 @@ class PupyOffloadAcceptor(object):
     def accept(self):
         while self.active:
             try:
-                self._conn = self._manager.request(self._proto, self._port)
+                self._conn = self._manager.request(
+                    self._proto, self._port, mtu=self._mtu
+                )
 
                 m = MsgPackMessages(self._conn)
-                conninfo = m.recv()
 
-                if conninfo['extra']:
-                    data = self._extra[conninfo['data']]
-                    m.send(data)
-                    conninfo = m.recv()
+                while True:
+                    message = m.recv()
+                    if message.get('keepalive', None):
+                        logger.debug('KeepAlive: %s', message['keepalive'])
+                        m.send(message)
+                        continue
+                    elif message.get('extra', None):
+                        data = self._extra[message['data']]
+                        m.send(data)
+                        continue
+
+                    logger.debug('Send last keepalive')
+                    m.send({
+                        'keepalive': int(time.time()),
+                        'last': True
+                    })
+                    break
+
+                conninfo = message
 
                 return PupyOffloadSocket(
                     self._conn,
@@ -214,6 +232,9 @@ class PupyOffloadAcceptor(object):
             except Exception, e:
                 logger.exception('Acceptor (%s): Exception: %s', self._port, e)
                 raise
+
+        raise EOFError('Socket closed')
+
 
 class PupyOffloadManager(object):
     def __init__(self, server, ca, key, crt, via):
@@ -263,7 +284,9 @@ class PupyOffloadManager(object):
         return PupyOffloadAcceptor(self, REQUEST_TCP_LISTENER, port, extra)
 
     def kcp(self, port, extra={}):
-        return PupyOffloadAcceptor(self, REQUEST_KCP_LISTENER, port, extra)
+        return PupyOffloadAcceptor(
+            self, REQUEST_KCP_LISTENER, port, extra, KCP_MTU
+        )
 
     def ssl(self, port, extra={}):
         return PupyOffloadAcceptor(self, REQUEST_TLS_LISTENER, port, extra)
@@ -272,7 +295,7 @@ class PupyOffloadManager(object):
     def external(self):
         return self._external_ip
 
-    def request(self, conntype, bind='', timeout=0):
+    def request(self, conntype, bind='', timeout=0, mtu=0):
         if self._via:
             proxy = self._via.scheme.upper()
             if proxy == 'SOCKS':
@@ -315,5 +338,6 @@ class PupyOffloadManager(object):
             'prot': conntype,
             'bind': str(bind),
             'timeout': timeout,
+            'mtu': mtu
         })
         return c

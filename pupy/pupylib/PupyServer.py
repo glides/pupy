@@ -49,7 +49,7 @@ from pupylib import PupyClient
 from pupylib import Credentials
 
 from .utils.rpyc_utils import obtain
-from .utils.network import get_listener_ip_with_local
+from .utils.listener import get_listener_ip_with_local
 
 from network.conf import transports
 from network.transports.ssl.conf import PupySSLAuthenticator
@@ -285,7 +285,10 @@ class Listener(Thread):
         self.server.listener = method(self.external_port, extra=extra)
 
     def run(self):
-        self.server.start()
+        try:
+            self.server.start()
+        except EOFError:
+            pass
 
     def close(self):
         if self.igd and self.igd_mapping:
